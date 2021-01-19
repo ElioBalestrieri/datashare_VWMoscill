@@ -1,0 +1,5 @@
+# Ignore compiled fiels from Python #
+##################################
+*.pyc
+*.pickle
+
