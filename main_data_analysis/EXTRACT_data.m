@@ -8,49 +8,59 @@ clc
 
 % logical flags
 want_label = false;
-want_all_trls = false;
-
-SetDefaultFigures
-
-%% DEFINE FOLDERS RAWDATA
-
-% select datafile
-[fileVar,filePath] = uigetfile('*','choose the datafile','MultiSelect','on');
-if filePath==0, error('None selected!'); end
+want_all_trls = true;
+raw_merged_already = true;
 
 
-
-%% GATHER ALL INFO INTO MATRIX FOR ALL SUBJECTS
-
-n_subject = numel(fileVar);
+%% select raw data and merge it, or directly load the merged datafile
+if ~raw_merged_already
 
 
-mat_data = nan(7,1440,n_subject);
+    %% DEFINE FOLDERS RAWDATA
 
-for iSubj = 1:n_subject
+    % select datafile
+    [fileVar,filePath] = uigetfile('*','choose the datafile','MultiSelect','on');
+    if filePath==0, error('None selected!'); end
+
+
+
+    %% GATHER ALL INFO INTO MATRIX FOR ALL SUBJECTS
+
+    n_subject = numel(fileVar);
+
+
+    mat_data = nan(7,1440,n_subject);
+
+    for iSubj = 1:n_subject
+
+        load([filePath fileVar{iSubj}])
+
+        %% CREATE SINGLE MATRIX gathering all conditions, response and so on
+        % 1 row: load condition
+        % 2 row: mem equality condition
+        % 3 row: subj mem response
+        % 4 row: deltaT
+        % 5 row: timestamp delta
+        % 6 row: flash_presence
+        % 7 row: subj flash response
+
+        mat_data(1,:,iSubj) = main.condLoad;
+        mat_data(2,:,iSubj) = main.eqVSdiff;
+        mat_data(3,:,iSubj) = main.resp_MEM;
+        mat_data(4,:,iSubj) = main.vect_deltaT;
+        mat_data(5,:,iSubj) = main.timestamp(:,5)';
+        mat_data(6,:,iSubj) = main.flashVScatch;
+        mat_data(7,:,iSubj) = main.resp_FLASH;
+
+
+    end
+
+else
     
-    load([filePath fileVar{iSubj}])
+    load('../RAW_data_collapsed.mat')
+    n_subject = size(mat_data, 3);
     
-    %% CREATE SINGLE MATRIX gathering all conditions, response and so on
-    % 1 row: load condition
-    % 2 row: mem equality condition
-    % 3 row: subj mem response
-    % 4 row: deltaT
-    % 5 row: timestamp delta
-    % 6 row: flash_presence
-    % 7 row: subj flash response
-   
-    mat_data(1,:,iSubj) = main.condLoad;
-    mat_data(2,:,iSubj) = main.eqVSdiff;
-    mat_data(3,:,iSubj) = main.resp_MEM;
-    mat_data(4,:,iSubj) = main.vect_deltaT;
-    mat_data(5,:,iSubj) = main.timestamp(:,5)';
-    mat_data(6,:,iSubj) = main.flashVScatch;
-    mat_data(7,:,iSubj) = main.resp_FLASH;
-
-
 end
-
 
 %% START ANALYSIS
 
@@ -78,16 +88,7 @@ SDT_mat = nan(2,2,3,n_subject);   % HR  |  MR   || load || subject
 for iSubj = 1:n_subject
 
     curr_mat = mat_data(:,:,iSubj);
-    
-    % warning -- expected delta t 
-    mismatch_delta = curr_mat(4,:)~=round(100*curr_mat(5,:));
-    % something weird with 55 (?)
-    if any(mismatch_delta)
-        warning(['-- ' fileVar{iSubj} ' --']) 
-        warning(['there are ' num2str(sum(mismatch_delta)) ' delta mismatch'])
-        %curr_mat(7,mismatch_delta) = nan;
-    end
-    
+        
     % warning --nan + get delta values 
     delta_vals = unique(curr_mat(4,:));
     if any(isnan(delta_vals))
@@ -370,103 +371,6 @@ set(gca, 'XTickLabel',str_loads, 'XTick',1:3)
 title(str_titles{curr_plot});
 
 
-%% non-parametric plots
-figure
-suptitle('non-parametric plots')
-
-% Aprime
-curr_plot = 1;
-subplot(1,2,curr_plot)
-
-errorbar(1:3, ga_Aprime, stdERR_Aprime, 'k',...
-    'Linewidth', 3)
-hold on
-
-for iScatter =1:3
-    
-    scatter(mask_plot(:,iScatter), Aprime_mat(:,iScatter),'filled')
-    
-    if want_label
-        text(mask_plot(:,iScatter), Aprime_mat(:,iScatter), fileVar)       
-    end
-    
-    hold on 
-    
-end
-
-
-set(gca, 'XTickLabel',str_loads, 'XTick',1:3)
-title('A prime');
-
-Aprime_ANOVA = rm1W_ANOVA_adapted(Aprime_mat, str_loads, 0,0,'')
-
-% B second
-
-% Aprime
-curr_plot = 2;
-subplot(1,2,curr_plot)
-
-errorbar(1:3, ga_Bsecond, stdERR_Bsecond, 'k',...
-    'Linewidth', 3)
-hold on
-
-for iScatter =1:3
-    
-    scatter(mask_plot(:,iScatter), Bsecond_mat(:,iScatter),'filled')
-    
-    if want_label
-        text(mask_plot(:,iScatter), Bsecond_mat(:,iScatter), fileVar)       
-    end
-    
-    hold on 
-    
-end
-
-
-set(gca, 'XTickLabel',str_loads, 'XTick',1:3)
-title('B second');
-
-Bsecond_ANOVA = rm1W_ANOVA_adapted(Bsecond_mat, str_loads, 0,0,'')
-
-
-
-
-%% PLOT TRENDS
-
-subj_titles = fileVar; % {'subj 1', 'subj 2','subj 3', 'subj '};
-
-colormat = [.1 0 .8; .8 0 0; .85 .7 0];
-
-% HR
-figure
-for iLoad = 1:3
-    subplot(3,1,iLoad)
-    
-    plot(150:40:750,squeeze(HR_mat(iLoad,:,:)),'Color', colormat(iLoad,:),...
-        'LineWidth',2)
-    title(str_loads{iLoad})
-    xlim([150 750])
-    
-    
-end
-xlabel('ms from memory array offset') 
-suptitle('Hit rate')
-
-
-
-% acc
-% figure
-% suptitle('accuracy')
-% for iPlot = 1:n_subject
-%     subplot(n_subject,1,iPlot)
-%     title(subj_titles{iPlot})
-%     
-%     plot(150:40:750,squeeze(ACC_mat(:,:,iPlot))')
-%     
-%     legend('load0','load2','load4')
-%     
-% end
-
 
 %% check SDT in good vs poor
 
@@ -561,69 +465,19 @@ for iField = nFields
     
 end
 
-%% evaluate d' as a function of K
 
-figure
-for iPlot = 1:3
-    subplot(1,3,iPlot)
-    scatter(cowanK_mat(:,2), dPrime_mat(:,iPlot), 20,'k', 'filled')
-    [r,p] = corr(cowanK_mat(:,2), dPrime_mat(:,iPlot))
-end
-
-% 
 %% save output
 
-save('RAW_data_collapsed.mat', 'mat_data')
-save('ACC_allsubj.mat','ACC_mat')
-save('CowansK.mat', 'cowanK_mat')
-save('dPrime.mat', 'dPrime_mat')
+save('../ACC_allsubj.mat','ACC_mat')
+save('../CowansK.mat', 'cowanK_mat')
+save('../dPrime.mat', 'dPrime_mat')
 
 if want_all_trls
     
-    warning('all trials selected, regardless memory accuracy!')
-    save('HR_allsubj_allTrls.mat','HR_mat')
+    save('../HR_allsubj_allTrls.mat','HR_mat')
     
 else
     
-    save('HR_allsubj.mat','HR_mat')
+    save('../HR_allsubj.mat','HR_mat')
 
 end
-
-
-%% perform 2w rm ANOVA
-
-HR_GvsP = cat(3,HR_good, HR_poor);
-FA_GvsP = cat(3,FA_good, FA_poor);
-dPrime_GvsP = cat(3,dPrime_good, dPrime_poor);
-criterion_GvsP = cat(3,criterion_good, criterion_poor);
-
-R_anova_HR = R_ectify(HR_GvsP,'subj', 'load', 'group');
-R_anova_HR.subj(34:end) = R_anova_HR.subj(34:end)+11;
-
-
-R_anova_FA = R_ectify(FA_GvsP,'subj', 'load', 'group');
-R_anova_FA.subj(34:end) = R_anova_FA.subj(34:end)+11;
-
-
-R_anova_dPrime = R_ectify(dPrime_GvsP,'subj', 'load', 'group')
-R_anova_dPrime.subj(34:end) = R_anova_dPrime.subj(34:end)+11;
-
-
-R_anova_criterion = R_ectify(criterion_GvsP,'subj', 'load', 'group')
-R_anova_criterion.subj(34:end) = R_anova_criterion.subj(34:end)+11;
-
-curr_DIR = '/home/elio/Future_Now/ExperimentVWM/data_analysis/script/R_input/';
-
-writetable(R_anova_HR, [curr_DIR 'R_anova_HR.csv'])
-writetable(R_anova_FA, [curr_DIR 'R_anova_FA.csv'])
-writetable(R_anova_dPrime, [curr_DIR 'R_anova_dPrime.csv'])
-writetable(R_anova_criterion, [curr_DIR 'R_anova_criterion.csv'])
-
-%% percentage of wrong responses for memory + sd
-
-newMat = [zeros(n_subject,1), 1-mem_accuracy]
-newVect = newMat(:)
-mean(newVect*100)
-std(newVect*100)
-
-

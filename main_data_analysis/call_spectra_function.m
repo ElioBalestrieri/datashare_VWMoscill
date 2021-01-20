@@ -1,0 +1,318 @@
+%% call spectra function
+
+clearvars;
+close all
+clc
+
+n_perm = 1000;
+
+permutation = 'raw';
+want_all_trls = true;
+
+%% 
+if want_all_trls
+    load('../HR_allsubj_allTrls.mat')
+else
+    load('../HR_allsubj.mat')
+end
+n_subj = size(HR_mat,3);
+
+load0 = squeeze(HR_mat(1,:,:));
+load2 = squeeze(HR_mat(2,:,:));
+load4 = squeeze(HR_mat(3,:,:));
+
+%% create required strct
+
+params = [];
+params.detrend_flag = 2;
+params.window = 'hanning';
+params.power = 0;
+params.zero_pad = 7;
+params.subj_dim = 2;
+params.time_bins = (.15:.04:.75)';
+params.f_sample = 25;
+params.verbose = -1;
+params.lp_filter = 0;
+
+
+spctr_load0 = cmpt_beh_spectra(load0, params);
+spctr_load2 = cmpt_beh_spectra(load2, params);
+spctr_load4 = cmpt_beh_spectra(load4, params);
+
+%% see what's going on
+
+fin_L0 = mean(spctr_load0.spctr_out, 2);
+fin_L2 = mean(spctr_load2.spctr_out, 2);
+fin_L4 = mean(spctr_load4.spctr_out, 2);
+
+% and compare it with phase locked signals..
+PL_L0 = abs(sum(spctr_load0.cmplx_out, 2))/n_subj;
+PL_L2 = abs(sum(spctr_load2.cmplx_out, 2))/n_subj;
+PL_L4 = abs(sum(spctr_load4.cmplx_out, 2))/n_subj;
+
+
+figure()
+subplot(2, 1, 1); hold on
+plot(spctr_load0.freqs, fin_L0)
+plot(spctr_load0.freqs, fin_L2)
+plot(spctr_load0.freqs, fin_L4)
+
+subplot(2, 1, 2); hold on
+plot(spctr_load0.freqs, PL_L0)
+plot(spctr_load0.freqs, PL_L2)
+plot(spctr_load0.freqs, PL_L4)
+
+
+[outANOVAS, structT] =  SPECTRAL_analysis(spctr_load0.spctr_out, spctr_load2.spctr_out,...
+    spctr_load4.spctr_out, spctr_load0.freqs);
+
+%% start permutations
+
+big_mat_perm = nan([size(spctr_load0.spctr_out),...
+    n_perm, 3]);
+
+% apply permutation, either shuffling hits and misses or HR
+if strcmp(permutation, 'raw')
+    
+    HR_mat_perm = permute_from_raw(want_all_trls, n_perm);
+    
+    for iPerm = 1:n_perm
+        
+        for iLoad = 1:3
+            
+           shuffled_HR_mat = squeeze(HR_mat_perm(iLoad,:,:,iPerm));
+           curr_spctr = cmpt_beh_spectra(shuffled_HR_mat, params);        
+           big_mat_perm(:,:,iPerm,iLoad) = curr_spctr.spctr_out;
+           
+        end
+        
+        if mod(iPerm, 100) ==0
+            fprintf('\n %d permutations', iPerm)
+        end
+        
+    end
+   
+    
+else
+    
+    for iPerm = 1:n_perm
+
+        for iLoad = 1:3
+
+            curr_HR_mat = squeeze(HR_mat(iLoad,:,:));
+
+            shuffled_HR_mat = nan(size(curr_HR_mat));
+
+            for iSubj = 1:n_subj
+
+                swap_vect = curr_HR_mat(:, iSubj);
+                shuffled_HR_mat(:,iSubj) = randsample(swap_vect,...
+                    numel(swap_vect));
+
+            end
+
+            curr_spctr = cmpt_beh_spectra(shuffled_HR_mat, params);        
+            big_mat_perm(:,:,iPerm,iLoad) = curr_spctr.spctr_out;
+
+        end
+
+        if mod(iPerm, 100) ==0
+            fprintf('\n %d permutations', iPerm)
+        end
+
+    end
+
+end
+perm_L0 = squeeze(mean(big_mat_perm(:,:,:,1), 2));
+perm_L2 = squeeze(mean(big_mat_perm(:,:,:,2), 2));
+perm_L4 = squeeze(mean(big_mat_perm(:,:,:,3), 2));
+
+L0_95 = prctile(perm_L0, 95, 2);
+L2_95 = prctile(perm_L2, 95, 2);
+L4_95 = prctile(perm_L4, 95, 2);
+
+%% redo figure applying omnibus correction in the interval 2-10 Hz
+% +mseb
+
+limFreqsLgcl = spctr_load0.freqs>2 & spctr_load0.freqs<10;
+
+L0_95(limFreqsLgcl==0)=nan;
+L2_95(limFreqsLgcl==0)=nan;
+L4_95(limFreqsLgcl==0)=nan;
+
+mask.lglc.L0 = L0_95==max(L0_95);
+mask.lglc.L2 = L2_95==max(L2_95);
+mask.lglc.L4 = L4_95==max(L4_95);
+
+mask.max.L0 = max(L0_95);
+mask.max.L2 = max(L2_95);
+mask.max.L4 = max(L4_95);
+
+
+str_load = {'load 0', 'load 2', 'load 4'};
+cols = [0 204 204;
+        127 0 255;
+        255 51 153]/255;
+
+for iLoad = 1:3
+    
+    currMat = squeeze(HR_mat(iLoad,:,:));
+    det_HR(iLoad,:,:) = apply_detrend(currMat, params);
+    
+end
+
+spctr_mat = cat(3, spctr_load0.spctr_out, spctr_load2.spctr_out,spctr_load4.spctr_out)
+
+%% get p vals
+
+dists.L0 = perm_L0(mask.lglc.L0,:);
+dists.L2 = perm_L2(mask.lglc.L2,:);
+dists.L4 = perm_L4(mask.lglc.L4,:);
+
+peaks = max([fin_L0, fin_L2, fin_L4])
+
+fn = fieldnames(dists);
+for iLoad = 1:3
+    
+    [arrProb(:,1,iLoad), arrProb(:,2,iLoad)] = ecdf(dists.(fn{iLoad}));
+    
+    idxVal = find(arrProb(:,2,iLoad)>peaks(iLoad),1)-1;
+    pVals(iLoad) = 1-arrProb(idxVal, 1, iLoad);
+    
+end
+    
+    
+
+%% nice plot
+figure
+cPlot = 0;
+lineProps = [];
+vect_thresh = [mask.max.L0, mask.max.L2, mask.max.L4];
+
+for iPlot = 1:3
+    
+    PlotStr(iPlot).RTavg = squeeze(mean(HR_mat(iPlot,:,:),3)); % is Hit rate, not Reaction times :)
+    PlotStr(iPlot).RTstdERR = squeeze(std(HR_mat(iPlot,:,:),[],3))/sqrt(n_subj);
+    
+    PlotStr(iPlot).detRTavg = squeeze(mean(det_HR(iPlot,:,:),3));
+    PlotStr(iPlot).detRTstdERR = squeeze(std(det_HR(iPlot,:,:),[],3))/sqrt(n_subj);
+    
+    PlotStr(iPlot).spctrAVG = squeeze(mean(spctr_mat(:,:,iPlot),2));
+    PlotStr(iPlot).spctrStdERR = squeeze(std(spctr_mat(:,:,iPlot),[],2))/sqrt(n_subj);
+    
+    cPlot = cPlot+1;
+    ax = subplot(6,2,cPlot)
+    lineProps.col = {cols(iPlot,:)};
+    lineProps.style = '-';
+    mseb(params.time_bins', PlotStr(iPlot).RTavg, PlotStr(iPlot).RTstdERR, lineProps, 1)
+    xlim(minmax(params.time_bins'))
+    title(str_load{iPlot})
+    ylabel('HR')
+    set(ax(1),'XTickLabel','')
+    set(ax(1),'XColor',get(gca,'Color'))
+    set(ax(1),'box','off')
+    
+    
+    cPlot = cPlot+2;
+    ax = subplot(6,2,cPlot); hold on;
+    lineProps.style = '-';
+    mseb(params.time_bins', PlotStr(iPlot).detRTavg, PlotStr(iPlot).detRTstdERR, lineProps, 1)
+    plot(params.time_bins, zeros(numel(params.time_bins), 1), 'k', 'LineWidth',.5) 
+    xlim(minmax(params.time_bins'))
+    ylabel({'detrended', 'HR'})
+    
+    if iPlot<3
+        set(ax(1),'XTickLabel','')
+        set(ax(1),'XColor',get(gca,'Color'))
+        
+    end
+    
+    if iPlot == 3
+        xlabel('time (s)')
+    end
+    
+    ax = subplot(6,2,[cPlot-1,cPlot+1]);
+    lineProps.style = '-';
+    mseb(spctr_load0.freqs, PlotStr(iPlot).spctrAVG', PlotStr(iPlot).spctrStdERR', lineProps, 1)
+    
+    hold on    
+    plot([0 12.5], [vect_thresh(iPlot),vect_thresh(iPlot)],'--k','LineWidth', 2) 
+    
+    xlim([2 10])
+    ylim([.15 .35])
+    
+    if iPlot ==1
+        title('spectra')
+    end
+    
+    if iPlot<3
+        set(ax(1),'XTickLabel','')
+        set(ax(1),'XColor',get(gca,'Color'))
+    end
+        
+    if iPlot == 3
+        xlabel('frequency (Hz)')
+    end
+    ylabel('fft amplitude')
+
+    cPlot = cPlot+1;
+    
+    
+end
+    
+
+%% final figure -truth moment-
+
+L0_95 = prctile(perm_L0, 95, 2);
+L2_95 = prctile(perm_L2, 95, 2);
+L4_95 = prctile(perm_L4, 95, 2);
+
+
+figure
+subplot(1,3,1)
+plot(spctr_load0.freqs, fin_L0,'b', 'LineWidth', 2); hold on;
+plot(spctr_load0.freqs, L0_95,'r', 'LineWidth', 2); hold on;
+title('load0')
+xlabel('freqs (Hz)')
+xlim(minmax(spctr_load0.freqs));
+ylabel('power')
+
+subplot(1,3,2)
+plot(spctr_load0.freqs, fin_L2,'b', 'LineWidth', 2); hold on;
+plot(spctr_load0.freqs, L2_95,'r', 'LineWidth', 2); hold on;
+title('load2')
+xlabel('freqs (Hz)')
+xlim(minmax(spctr_load0.freqs));
+
+
+subplot(1,3,3)
+plot(spctr_load0.freqs, fin_L4,'b', 'LineWidth', 2); hold on;
+plot(spctr_load0.freqs, L4_95,'r', 'LineWidth', 2); hold on;
+title('load4')
+xlabel('freqs (Hz)')
+xlim(minmax(spctr_load0.freqs));
+
+%% check uncorrected pVal for 
+
+bigPerm = cat(3, perm_L0, perm_L2, perm_L4);
+arrProb_ALL = nan(n_perm+1, 2, numel(spctr_load0.freqs), 3);
+mat_spctr = [fin_L0, fin_L2, fin_L4];
+for iLoad = 1:3
+    
+    for iFreq = 1:numel(L0_95)
+        
+        [arrProb_ALL(:,1,iFreq,iLoad), arrProb_ALL(:,2,iFreq,iLoad)] =...
+            ecdf(bigPerm(iFreq, :, iLoad));
+    
+        idxVal = find(arrProb_ALL(:,2,iFreq,iLoad)>mat_spctr(iFreq, iLoad),1)-1;
+        pVals_all(iFreq,iLoad) = 1-arrProb_ALL(idxVal, 1,iFreq, iLoad);
+        
+    end
+    
+end
+        
+        
+pVals_all = [spctr_load0.freqs', pVals_all];
+
+%% 
+
