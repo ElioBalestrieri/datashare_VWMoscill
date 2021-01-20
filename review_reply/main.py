@@ -138,6 +138,7 @@ ax.bar(x + width/2, FA_VWM, width, label='FA', yerr=FA_err)
 ax.set_xticks(x)
 ax.set_xticklabels(['load 2', 'load4'])
 ax.legend()
+plt.title('VWM HR and FA')
 
 # A prime trend over SOAs
 avg_L2 = VWM_trends_SOA[:, :, 0].mean(axis=1)

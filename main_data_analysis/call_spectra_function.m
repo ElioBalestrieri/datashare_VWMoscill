@@ -7,7 +7,7 @@ clc
 n_perm = 1000;
 
 permutation = 'raw';
-want_all_trls = true;
+want_all_trls = false;
 
 %% 
 if want_all_trls
@@ -39,6 +39,35 @@ spctr_load0 = cmpt_beh_spectra(load0, params);
 spctr_load2 = cmpt_beh_spectra(load2, params);
 spctr_load4 = cmpt_beh_spectra(load4, params);
 
+
+
+%% find maxima freuencies
+peakfreqs_L0 = peakfreqs(spctr_load0);
+peakfreqs_L2 = peakfreqs(spctr_load2);
+peakfreqs_L4 = peakfreqs(spctr_load4);
+
+condnames = {'load0', 'load2', 'load4'};
+
+% load cowan's K 
+load('../CowansK.mat')
+
+% collect all peak frequencies in one mat for ANOVA
+mat_peak_freqs = [peakfreqs_L0, peakfreqs_L2, peakfreqs_L4];
+
+% correlate individual peaks with cowans K in respoective WM conditions
+[rho2, corr_p2] = corr(peakfreqs_L2, cowanK_mat(:, 1));
+[rho4, corr_p4] = corr(peakfreqs_L4, cowanK_mat(:, 2));
+
+figure();
+subplot(1, 2, 1)
+scatter(peakfreqs_L2, cowanK_mat(:, 1))
+subplot(1, 2, 2)
+scatter(peakfreqs_L4, cowanK_mat(:, 2))
+
+
+[outTableANOVA, ~, ~] = rm1W_ANOVA_adapted(mat_peak_freqs,...
+    condnames,0,1,'peak frequencies')
+
 %% see what's going on
 
 fin_L0 = mean(spctr_load0.spctr_out, 2);
@@ -68,68 +97,60 @@ plot(spctr_load0.freqs, PL_L4)
 
 %% start permutations
 
-big_mat_perm = nan([size(spctr_load0.spctr_out),...
-    n_perm, 3]);
+[big_mat_perm, phaselocked_perms_bigmat] = deal(nan([size(spctr_load0.spctr_out),...
+    n_perm, 3]));
+    
+HR_mat_perm = permute_from_raw(want_all_trls, n_perm);
+    
+for iPerm = 1:n_perm
 
-% apply permutation, either shuffling hits and misses or HR
-if strcmp(permutation, 'raw')
-    
-    HR_mat_perm = permute_from_raw(want_all_trls, n_perm);
-    
-    for iPerm = 1:n_perm
-        
-        for iLoad = 1:3
-            
-           shuffled_HR_mat = squeeze(HR_mat_perm(iLoad,:,:,iPerm));
-           curr_spctr = cmpt_beh_spectra(shuffled_HR_mat, params);        
-           big_mat_perm(:,:,iPerm,iLoad) = curr_spctr.spctr_out;
-           
-        end
-        
-        if mod(iPerm, 100) ==0
-            fprintf('\n %d permutations', iPerm)
-        end
-        
+    for iLoad = 1:3
+
+        shuffled_HR_mat = squeeze(HR_mat_perm(iLoad,:,:,iPerm));
+        curr_spctr = cmpt_beh_spectra(shuffled_HR_mat, params);        
+        big_mat_perm(:,:,iPerm,iLoad) = curr_spctr.spctr_out;
+        phaselocked_perms_bigmat(:,:,iPerm,iLoad) = curr_spctr.cmplx_out;
+       
     end
-   
-    
-else
-    
-    for iPerm = 1:n_perm
 
-        for iLoad = 1:3
-
-            curr_HR_mat = squeeze(HR_mat(iLoad,:,:));
-
-            shuffled_HR_mat = nan(size(curr_HR_mat));
-
-            for iSubj = 1:n_subj
-
-                swap_vect = curr_HR_mat(:, iSubj);
-                shuffled_HR_mat(:,iSubj) = randsample(swap_vect,...
-                    numel(swap_vect));
-
-            end
-
-            curr_spctr = cmpt_beh_spectra(shuffled_HR_mat, params);        
-            big_mat_perm(:,:,iPerm,iLoad) = curr_spctr.spctr_out;
-
-        end
-
-        if mod(iPerm, 100) ==0
-            fprintf('\n %d permutations', iPerm)
-        end
-
+    if mod(iPerm, 100) ==0
+        fprintf('\n %d permutations', iPerm)
     end
 
 end
+   
 perm_L0 = squeeze(mean(big_mat_perm(:,:,:,1), 2));
 perm_L2 = squeeze(mean(big_mat_perm(:,:,:,2), 2));
 perm_L4 = squeeze(mean(big_mat_perm(:,:,:,3), 2));
 
+perm_PL_L0 = squeeze(abs(sum(phaselocked_perms_bigmat(:,:,:,1), 2))/n_subj);
+perm_PL_L2 = squeeze(abs(sum(phaselocked_perms_bigmat(:,:,:,2), 2))/n_subj);
+perm_PL_L4 = squeeze(abs(sum(phaselocked_perms_bigmat(:,:,:,3), 2))/n_subj);
+
 L0_95 = prctile(perm_L0, 95, 2);
 L2_95 = prctile(perm_L2, 95, 2);
 L4_95 = prctile(perm_L4, 95, 2);
+
+PL_L0_95 = prctile(perm_PL_L0, 95, 2);
+PL_L2_95 = prctile(perm_PL_L2, 95, 2);
+PL_L4_95 = prctile(perm_PL_L4, 95, 2);
+
+
+%% plot 95 percentiles with phase locked sum 
+figure()    
+
+subplot(1, 3, 1); hold on
+plot(spctr_load0.freqs, PL_L0, 'LineWidth', 2)
+plot(spctr_load0.freqs, PL_L0_95, 'LineWidth', 2)
+
+subplot(1, 3, 2); hold on
+plot(spctr_load0.freqs, PL_L2, 'LineWidth', 2)
+plot(spctr_load0.freqs, PL_L2_95, 'LineWidth', 2)
+
+subplot(1, 3, 3); hold on
+plot(spctr_load0.freqs, PL_L4, 'LineWidth', 2)
+plot(spctr_load0.freqs, PL_L4_95, 'LineWidth', 2)
+
 
 %% redo figure applying omnibus correction in the interval 2-10 Hz
 % +mseb
