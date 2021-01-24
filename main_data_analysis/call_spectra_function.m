@@ -7,7 +7,7 @@ clc
 n_perm = 1000;
 
 permutation = 'raw';
-want_all_trls = false;
+want_all_trls = true;
 
 %% 
 if want_all_trls
@@ -78,6 +78,9 @@ fin_L4 = mean(spctr_load4.spctr_out, 2);
 PL_L0 = abs(sum(spctr_load0.cmplx_out, 2))/n_subj;
 PL_L2 = abs(sum(spctr_load2.cmplx_out, 2))/n_subj;
 PL_L4 = abs(sum(spctr_load4.cmplx_out, 2))/n_subj;
+
+% find maxima 
+
 
 
 figure()
