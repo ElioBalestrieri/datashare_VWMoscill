@@ -195,7 +195,7 @@ for iSubj = 1:n_subject
             loopDelta = loopDelta+1;
             
             % find current delta t in data
-            deltaT_Lmask = curr_mat(4,:)==iDelta;
+            deltaT_Lmask = curr_mat(4,:)==iDelta; disp(sum(deltaT_Lmask));
 
             % mask for current load, delta t in right memory trials
             delta_load_mem_Lmask = deltaT_Lmask&loadMemAcc_Lmask;

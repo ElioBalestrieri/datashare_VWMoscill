@@ -1,12 +1,27 @@
 %% compute spectra for bad and good
 
 clearvars
-close all
+% close all
 clc
 
-load('CowansK.mat')
-load('HR_allsubj.mat')
+want_all_trls = false;
 
+
+
+
+load('../CowansK.mat')
+
+if want_all_trls
+
+    load('../HR_allsubj_allTrls.mat')
+
+else
+    
+    load('../HR_allsubj.mat')
+    
+end
+    
+    
 medianK = median(cowanK_mat(:,2));
 
 lgcl_good = cowanK_mat(:,2)>=medianK;
@@ -68,8 +83,7 @@ stdERR_spctr_poor_L4 = std(spctr_poor_L4.spctr_out,[],2)/sqrt(size(spctr_poor_L4
 
 %% permutations
 n_subj = size(HR_mat,3);
-want_all_trls = false;
-n_iter = 10000;
+n_iter = 1000;
 HR_mat_perm = permute_from_raw(want_all_trls, n_iter);
 
 perm_spectra_good(n_iter,3).foo = [];
@@ -437,4 +451,18 @@ for iPlot = 1:3
       
 end
 
-%% eval correlation between 
+%% compare sin fit with 95 perc of perms
+[mat_fitted_adjR2, best_freqfit, perc_95_perms] = deal(nan(3, 2));
+
+
+for icond = 1:3
+    
+    mat_fitted_adjR2(icond, 1) = StructLoad(icond).FIT.poor.gof;
+    best_freqfit(icond, 1) = StructLoad(icond).FIT.poor.freq;
+    perc_95_perms(icond, 1) = GOF_perm.poor.thresh95(icond);
+
+    mat_fitted_adjR2(icond, 2) = StructLoad(icond).FIT.good.gof;
+    best_freqfit(icond, 2) = StructLoad(icond).FIT.good.fitresult;
+    perc_95_perms(icond, 2) = GOF_perm.good.thresh95(icond);
+
+end

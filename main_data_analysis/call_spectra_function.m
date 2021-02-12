@@ -7,7 +7,9 @@ clc
 n_perm = 1000;
 
 permutation = 'raw';
-want_all_trls = true;
+want_all_trls = false;
+addpath('/home/ebalestr/toolboxes/CircStat/')
+
 
 %% 
 if want_all_trls
@@ -41,10 +43,29 @@ spctr_load4 = cmpt_beh_spectra(load4, params);
 
 
 
-%% find maxima freuencies
-peakfreqs_L0 = peakfreqs(spctr_load0);
-peakfreqs_L2 = peakfreqs(spctr_load2);
-peakfreqs_L4 = peakfreqs(spctr_load4);
+%% find maxima frequencies
+
+figure()
+
+ax = subplot(1, 3, 1); 
+pol_ax = polaraxes('Units', ax.Units, 'Position',ax.Position);
+delete(ax)
+[peakfreqs_L0, maxfreq, pval] = peakfreqs(spctr_load0, pol_ax);
+title(sprintf('Load 0, F=%0.2f, Rayleigh p=%0.3f', maxfreq, pval))
+
+ax = subplot(1, 3, 2); 
+pol_ax = polaraxes('Units', ax.Units, 'Position',ax.Position);
+delete(ax)
+[peakfreqs_L2, maxfreq, pval] = peakfreqs(spctr_load2, pol_ax);
+title(sprintf('Load 2, F=%0.2f, Rayleigh p=%0.3f', maxfreq, pval))
+
+ax = subplot(1, 3, 3); 
+pol_ax = polaraxes('Units', ax.Units, 'Position',ax.Position);
+delete(ax)
+[peakfreqs_L4, maxfreq, pval] = peakfreqs(spctr_load4, pol_ax);
+title(sprintf('Load 4, F=%0.2f, Rayleigh p=%0.3f', maxfreq, pval))
+
+%%
 
 condnames = {'load0', 'load2', 'load4'};
 
@@ -61,12 +82,23 @@ mat_peak_freqs = [peakfreqs_L0, peakfreqs_L2, peakfreqs_L4];
 figure();
 subplot(1, 2, 1)
 scatter(peakfreqs_L2, cowanK_mat(:, 1))
+ylabel('Cowan K')
+xlabel('peak frequency')
+title('load 2')
 subplot(1, 2, 2)
 scatter(peakfreqs_L4, cowanK_mat(:, 2))
+xlabel('peak frequency')
+title('load 4')
 
-
+figure()
 [outTableANOVA, ~, ~] = rm1W_ANOVA_adapted(mat_peak_freqs,...
     condnames,0,1,'peak frequencies')
+
+
+% compute phase consistency for maxima
+
+
+
 
 %% see what's going on
 
@@ -184,6 +216,49 @@ for iLoad = 1:3
     det_HR(iLoad,:,:) = apply_detrend(currMat, params);
     
 end
+
+%% plot dynamic range after detrend
+min_det = squeeze(min(det_HR, [], 2));
+max_det = squeeze(max(det_HR, [], 2));
+
+figure();
+
+mat_plotpos = [1, 2, 3; 5, 6, 7; 9, 10, 11];
+
+
+for icond =1:3
+    
+    
+    subplot(3, 4, mat_plotpos(icond, :))
+    
+    mat_bar = [min_det(icond, :); max_det(icond, :)]';
+    bar(mat_bar, 'stacked')
+    if icond==3
+        xlabel('subjects')
+    end
+    ylabel('dynamic range')
+    title(str_load{icond})
+    
+    
+    subplot(3, 4, icond*4)
+    avg_bar = mean(mat_bar);
+    err_bar = std(mat_bar) / sqrt(22);
+    bar(avg_bar(1)); hold on
+    bar(avg_bar(2))
+    errorbar(avg_bar(1), err_bar(1), 'k', 'LineWidth', 2)
+    errorbar(avg_bar(2), err_bar(2), 'k', 'LineWidth', 2)
+    if icond == 1
+        title('mean and std error')
+    end
+    xticks([])
+    
+    
+end
+
+
+
+
+
 
 spctr_mat = cat(3, spctr_load0.spctr_out, spctr_load2.spctr_out,spctr_load4.spctr_out)
 
