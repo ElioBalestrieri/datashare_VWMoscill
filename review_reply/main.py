@@ -17,7 +17,30 @@ from scipy.io import loadmat
 from scipy.stats import norm
 import matplotlib.pyplot as plt
 from helper import a_prime
+import pandas as pd
 
+
+
+#%% compute median and mean of subject numerosity
+
+studies = pd.read_csv('../samplesize_densesampling.csv')
+
+mean_subjs = studies['subjs'].mean()
+median_subjs = studies['subjs'].median()
+
+plt.figure()
+studies['subjs'].hist(label='subj numerosity distribution')
+plt.grid(b=None)
+
+plt.plot([median_subjs, median_subjs], [0, 20], 'r', linewidth=3, label='median')
+plt.plot([22, 22], [0, 20], 'k', linewidth=3, label='our study')
+
+plt.legend() 
+plt.title('Subjects in 66 experiments (53 studies)')
+plt.xlabel('N subjects')
+plt.ylabel('N Experiments')
+
+#%% 
 
 # load data from mat file
 dat = loadmat('../RAW_data_collapsed')['mat_data']
