@@ -8,7 +8,7 @@ clc
 
 % logical flags
 want_label = false;
-want_all_trls = true;
+want_all_trls = false;
 raw_merged_already = true;
 
 
@@ -280,9 +280,9 @@ end
 
 [HR_anova, HR_stdERR, HR_MC] = rm1W_ANOVA_adapted(ss_hr, str_loads, 0,0,'')
 
-
 errorbar(1:3, squeeze(ga_SDT(1,1,:)), HR_stdERR, 'k',...
     'Linewidth', 3)
+
 hold on
 
 set(gca, 'XTickLabel',str_loads, 'XTick',1:3)

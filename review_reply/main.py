@@ -14,11 +14,9 @@ original data analysis and stored in ../main_data_analysis
 
 import numpy as np
 from scipy.io import loadmat
-from scipy.stats import norm
 import matplotlib.pyplot as plt
-from helper import a_prime
 import pandas as pd
-
+import pingouin as pg
 
 
 #%% compute median and mean of subject numerosity
@@ -36,7 +34,7 @@ plt.plot([median_subjs, median_subjs], [0, 20], 'r', linewidth=3, label='median'
 plt.plot([22, 22], [0, 20], 'k', linewidth=3, label='our study')
 
 plt.legend() 
-plt.title('Subjects in 66 experiments (53 studies)')
+plt.title('Subjects in 67 experiments (52 studies)')
 plt.xlabel('N subjects')
 plt.ylabel('N Experiments')
 
@@ -133,8 +131,16 @@ for isubj in range(nsubjs):
                                       SOA_mask &
                                       flash_present_mask].mean()
 
-        VWM_trends_SOA[acc_SOA, isubj, 0] = a_prime(L2_soa_HR, L2_soa_FA)
-        VWM_trends_SOA[acc_SOA, isubj, 1] = a_prime(L4_soa_HR, L4_soa_FA)
+        acc2 = match[L2_mask & SOA_mask & flash_present_mask].mean()
+        acc4 = match[L4_mask & SOA_mask & flash_present_mask].mean()
+
+
+        # VWM_trends_SOA[acc_SOA, isubj, 0] = a_prime(L2_soa_HR, L2_soa_FA)
+        # VWM_trends_SOA[acc_SOA, isubj, 1] = a_prime(L4_soa_HR, L4_soa_FA)
+
+        VWM_trends_SOA[acc_SOA, isubj, 0] = acc2
+        VWM_trends_SOA[acc_SOA, isubj, 1] = acc4
+
 
         acc_SOA += 1
 
@@ -183,57 +189,38 @@ plt.plot(SOAs_vals*10, avg_L4, c=c4, label='load 4')
 plt.fill_between(SOAs_vals*10, avg_L4 - err_L4, avg_L4 + err_L4, color=c4, alpha=.15)
 
 plt.xlabel('SOA')
-plt.ylabel('A prime')
-plt.title('VWM sensitivity as a function of flash appearance SOA')
+plt.ylabel('accuracy')
+plt.title('VWM accuracy as a function of flash appearance SOA')
 plt.legend()
 
 
 
+#%% save npy aprime file
+
+np.save('../VWM_trends_SOA.npy', VWM_trends_SOA)
 
 
+#%% compute ANOVA 
+
+# convert the 3d matrix into dataframe
+ntp = VWM_trends_SOA.shape[0]
+nsubjs = VWM_trends_SOA.shape[1]
+nload = VWM_trends_SOA.shape[2]
+
+SOAs_df = [i+1 for i in range(ntp)]*(nsubjs*nload)
+accuracy_df = VWM_trends_SOA.flatten('F')
+subjs_codes = np.concatenate([np.array([p]*ntp) for p in range(nsubjs)]*nload).tolist()
+load_conds = np.concatenate([np.array([p]*ntp*nsubjs) for p in [2, 4]]).tolist()
+
+df_dict = {'accuracy': accuracy_df, 'SOAs': SOAs_df, 'subjects': subjs_codes, 'VWM_load' : load_conds}
+
+DF_VWM = pd.DataFrame.from_dict(df_dict)
+
+TwoWays_rm_aov = pg.rm_anova(dv='accuracy', 
+                             within=['SOAs', 'VWM_load'],
+                             subject='subjects',
+                             data=DF_VWM)
+
+TwoWays_rm_aov.round(3)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
-    

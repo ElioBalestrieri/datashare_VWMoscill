@@ -4,18 +4,25 @@ clearvars;
 close all
 clc
 
-n_perm = 1000;
+n_perm = 10000;
 
-permutation = 'raw';
 want_all_trls = false;
-addpath('/home/ebalestr/toolboxes/CircStat/')
+addpath('/home/elio/toolboxes/MATLAB/circstat-matlab/')
 
+% frequency limits to apply multiple corrections
+foi = [0, 15]; % whole range, for compatibility with previous version
+
+rng(0)
 
 %% 
 if want_all_trls
+
     load('../HR_allsubj_allTrls.mat')
+    load('../HR_allsubj_L02_alltrls.mat')
+
 else
     load('../HR_allsubj.mat')
+    load('../HR_allsubj_L02.mat')
 end
 n_subj = size(HR_mat,3);
 
@@ -27,9 +34,9 @@ load4 = squeeze(HR_mat(3,:,:));
 
 params = [];
 params.detrend_flag = 2;
-params.window = 'hanning';
+params.window = [];
 params.power = 0;
-params.zero_pad = 7;
+params.zero_pad = 2;
 params.subj_dim = 2;
 params.time_bins = (.15:.04:.75)';
 params.f_sample = 25;
@@ -41,61 +48,15 @@ spctr_load0 = cmpt_beh_spectra(load0, params);
 spctr_load2 = cmpt_beh_spectra(load2, params);
 spctr_load4 = cmpt_beh_spectra(load4, params);
 
+spctr_load02 = cmpt_beh_spectra(HR_L02, params);
 
+mask_freq_interest = (spctr_load0.freqs >= min(foi)) & (spctr_load0.freqs <= max(foi));
 
 %% find maxima frequencies
 
-figure()
 
-ax = subplot(1, 3, 1); 
-pol_ax = polaraxes('Units', ax.Units, 'Position',ax.Position);
-delete(ax)
-[peakfreqs_L0, maxfreq, pval] = peakfreqs(spctr_load0, pol_ax);
-title(sprintf('Load 0, F=%0.2f, Rayleigh p=%0.3f', maxfreq, pval))
-
-ax = subplot(1, 3, 2); 
-pol_ax = polaraxes('Units', ax.Units, 'Position',ax.Position);
-delete(ax)
-[peakfreqs_L2, maxfreq, pval] = peakfreqs(spctr_load2, pol_ax);
-title(sprintf('Load 2, F=%0.2f, Rayleigh p=%0.3f', maxfreq, pval))
-
-ax = subplot(1, 3, 3); 
-pol_ax = polaraxes('Units', ax.Units, 'Position',ax.Position);
-delete(ax)
-[peakfreqs_L4, maxfreq, pval] = peakfreqs(spctr_load4, pol_ax);
-title(sprintf('Load 4, F=%0.2f, Rayleigh p=%0.3f', maxfreq, pval))
-
-%%
-
-condnames = {'load0', 'load2', 'load4'};
-
-% load cowan's K 
-load('../CowansK.mat')
-
-% collect all peak frequencies in one mat for ANOVA
-mat_peak_freqs = [peakfreqs_L0, peakfreqs_L2, peakfreqs_L4];
-
-% correlate individual peaks with cowans K in respoective WM conditions
-[rho2, corr_p2] = corr(peakfreqs_L2, cowanK_mat(:, 1));
-[rho4, corr_p4] = corr(peakfreqs_L4, cowanK_mat(:, 2));
-
-figure();
-subplot(1, 2, 1)
-scatter(peakfreqs_L2, cowanK_mat(:, 1))
-ylabel('Cowan K')
-xlabel('peak frequency')
-title('load 2')
-subplot(1, 2, 2)
-scatter(peakfreqs_L4, cowanK_mat(:, 2))
-xlabel('peak frequency')
-title('load 4')
-
-figure()
-[outTableANOVA, ~, ~] = rm1W_ANOVA_adapted(mat_peak_freqs,...
-    condnames,0,1,'peak frequencies')
-
-
-% compute phase consistency for maxima
+colors = [0 204 204;
+         255 51 153]/255;
 
 
 
@@ -105,47 +66,40 @@ figure()
 fin_L0 = mean(spctr_load0.spctr_out, 2);
 fin_L2 = mean(spctr_load2.spctr_out, 2);
 fin_L4 = mean(spctr_load4.spctr_out, 2);
+fin_L02 = mean(spctr_load02.spctr_out, 2);
 
 % and compare it with phase locked signals..
 PL_L0 = abs(sum(spctr_load0.cmplx_out, 2))/n_subj;
 PL_L2 = abs(sum(spctr_load2.cmplx_out, 2))/n_subj;
 PL_L4 = abs(sum(spctr_load4.cmplx_out, 2))/n_subj;
+PL_L02 = abs(sum(spctr_load02.cmplx_out, 2))/n_subj;
 
-% find maxima 
-
-
-
-figure()
-subplot(2, 1, 1); hold on
-plot(spctr_load0.freqs, fin_L0)
-plot(spctr_load0.freqs, fin_L2)
-plot(spctr_load0.freqs, fin_L4)
-
-subplot(2, 1, 2); hold on
-plot(spctr_load0.freqs, PL_L0)
-plot(spctr_load0.freqs, PL_L2)
-plot(spctr_load0.freqs, PL_L4)
-
-
-[outANOVAS, structT] =  SPECTRAL_analysis(spctr_load0.spctr_out, spctr_load2.spctr_out,...
-    spctr_load4.spctr_out, spctr_load0.freqs);
 
 %% start permutations
 
+loadconds = 2;
+
 [big_mat_perm, phaselocked_perms_bigmat] = deal(nan([size(spctr_load0.spctr_out),...
-    n_perm, 3]));
+    n_perm, loadconds]));
     
-HR_mat_perm = permute_from_raw(want_all_trls, n_perm);
+HR_mat_perm = permute_from_raw_lowhighload(want_all_trls, n_perm);
+
+emp_multcomp = nan(n_perm, loadconds);
     
 for iPerm = 1:n_perm
 
-    for iLoad = 1:3
+    for iLoad = 1:loadconds
 
         shuffled_HR_mat = squeeze(HR_mat_perm(iLoad,:,:,iPerm));
         curr_spctr = cmpt_beh_spectra(shuffled_HR_mat, params);        
         big_mat_perm(:,:,iPerm,iLoad) = curr_spctr.spctr_out;
         phaselocked_perms_bigmat(:,:,iPerm,iLoad) = curr_spctr.cmplx_out;
        
+        foo = 1;
+        
+        vect_avgspctr = abs(sum(curr_spctr.cmplx_out(mask_freq_interest, :), 2));
+        emp_multcomp(iPerm, iLoad) = max(vect_avgspctr);
+        
     end
 
     if mod(iPerm, 100) ==0
@@ -154,70 +108,104 @@ for iPerm = 1:n_perm
 
 end
    
-perm_L0 = squeeze(mean(big_mat_perm(:,:,:,1), 2));
-perm_L2 = squeeze(mean(big_mat_perm(:,:,:,2), 2));
-perm_L4 = squeeze(mean(big_mat_perm(:,:,:,3), 2));
+perm_PL_L02 = squeeze(abs(sum(phaselocked_perms_bigmat(:,:,:,1), 2))/n_subj);
+perm_PL_L4 = squeeze(abs(sum(phaselocked_perms_bigmat(:,:,:,2), 2))/n_subj);
 
-perm_PL_L0 = squeeze(abs(sum(phaselocked_perms_bigmat(:,:,:,1), 2))/n_subj);
-perm_PL_L2 = squeeze(abs(sum(phaselocked_perms_bigmat(:,:,:,2), 2))/n_subj);
-perm_PL_L4 = squeeze(abs(sum(phaselocked_perms_bigmat(:,:,:,3), 2))/n_subj);
-
-L0_95 = prctile(perm_L0, 95, 2);
-L2_95 = prctile(perm_L2, 95, 2);
-L4_95 = prctile(perm_L4, 95, 2);
-
-PL_L0_95 = prctile(perm_PL_L0, 95, 2);
-PL_L2_95 = prctile(perm_PL_L2, 95, 2);
+PL_L02_95 = prctile(perm_PL_L02, 95, 2);
 PL_L4_95 = prctile(perm_PL_L4, 95, 2);
 
 
-%% plot 95 percentiles with phase locked sum 
-figure()    
+[mat_multcomp4(:, 1), mat_multcomp4(:, 2)] = ecdf(emp_multcomp(:, 2)/n_subj);
 
-subplot(1, 3, 1); hold on
-plot(spctr_load0.freqs, PL_L0, 'LineWidth', 2)
-plot(spctr_load0.freqs, PL_L0_95, 'LineWidth', 2)
-
-subplot(1, 3, 2); hold on
-plot(spctr_load0.freqs, PL_L2, 'LineWidth', 2)
-plot(spctr_load0.freqs, PL_L2_95, 'LineWidth', 2)
-
-subplot(1, 3, 3); hold on
-plot(spctr_load0.freqs, PL_L4, 'LineWidth', 2)
-plot(spctr_load0.freqs, PL_L4_95, 'LineWidth', 2)
+[mat_multcomp02(:, 1), mat_multcomp02(:, 2)] = ecdf(emp_multcomp(:, 1)/n_subj);
 
 
-%% redo figure applying omnibus correction in the interval 2-10 Hz
-% +mseb
-
-limFreqsLgcl = spctr_load0.freqs>2 & spctr_load0.freqs<10;
-
-L0_95(limFreqsLgcl==0)=nan;
-L2_95(limFreqsLgcl==0)=nan;
-L4_95(limFreqsLgcl==0)=nan;
-
-mask.lglc.L0 = L0_95==max(L0_95);
-mask.lglc.L2 = L2_95==max(L2_95);
-mask.lglc.L4 = L4_95==max(L4_95);
-
-mask.max.L0 = max(L0_95);
-mask.max.L2 = max(L2_95);
-mask.max.L4 = max(L4_95);
 
 
-str_load = {'load 0', 'load 2', 'load 4'};
-cols = [0 204 204;
-        127 0 255;
-        255 51 153]/255;
+
+%%
+set(groot, 'defaultAxesFontSize',14)
+
+
+figure; 
+
+subplot(2, 3, 1:2); hold on
+plot(spctr_load0.freqs, PL_L02, 'Color', colors(1, :), 'LineWidth', 3)
+plot(spctr_load0.freqs, PL_L02_95, 'r--', 'LineWidth', 2)
+legend('low load [0 & 2]', '95 percentile permutations')
+title('phase locked sum')
+xlim(minmax(spctr_load0.freqs))
+ylabel('amplitude (a.u.)')
+
+subplot(2, 3, 4:5); hold on
+plot(spctr_load0.freqs, PL_L4, 'Color', colors(2, :), 'LineWidth', 3)
+plot(spctr_load0.freqs, PL_L4_95, 'r--', 'LineWidth', 2)
+legend('high load [4]', '95 percentile permutations')
+xlim(minmax(spctr_load0.freqs))
+xlabel('frequency [Hz]')
+ylabel('amplitude (a.u.)')
+
+ax = subplot(2, 3, 3); 
+pol_ax = polaraxes('Units', ax.Units, 'Position',ax.Position);
+delete(ax)
+[peakfreqs_L02, cntr_freq, pval, Zcirc_L02] = peakfreqs(spctr_load02, pol_ax, ...
+    mask_freq_interest, colors(1, :));
+
+
+title(sprintf('Low load [0 | 2]\n F=%0.2f Hz, Rayleigh p=%0.3f', cntr_freq, pval), 'FontSize', 14)
+
+ax = subplot(2, 3, 6); 
+pol_ax = polaraxes('Units', ax.Units, 'Position',ax.Position);
+delete(ax)
+[peakfreqs_L4, cntr_freq, pval, Zcirc_L4] = peakfreqs(spctr_load4, pol_ax, ...
+    mask_freq_interest, colors(2, :));
+title(sprintf('High Load [4]\n F=%0.2f Hz, Rayleigh p=%0.3f', cntr_freq, pval), 'FontSize', 14)
+
+
+
+%% pvalues
+
+pvals_L02 = compute_pvals_and_mc(PL_L02, ...
+    squeeze(abs(sum(phaselocked_perms_bigmat(:, :, :, 1), 2))/n_subj), ...
+    spctr_load0.freqs)
+
+pvals_L4 = compute_pvals_and_mc(PL_L4, ...
+    squeeze(abs(sum(phaselocked_perms_bigmat(:, :, :, 2), 2))/n_subj), ...
+    spctr_load0.freqs)
+
+
+%% cowans K and maxima
+% load cowan's K 
+load('../CowansK.mat')
+
+
+[r_MAXcorr, p_MAXcorr] = corr(peakfreqs_L4, cowanK_mat(:, 2))
+[r_LOWcorr, p_LOWcorr] = corr(peakfreqs_L02, cowanK_mat(:, 2))
+
+
+figure; 
+subplot(1, 2, 1)
+scatter(peakfreqs_L4, cowanK_mat(:, 2))
+subplot(1, 2, 2)
+scatter(peakfreqs_L02, cowanK_mat(:, 2))
+
+
+
+
+%% plot dynamic range after detrend 
+% still keep the three load condition separate here
+
+det_HR = nan(size(HR_mat));
+
+str_load = {'load0', 'load2', 'load4'};
 
 for iLoad = 1:3
     
     currMat = squeeze(HR_mat(iLoad,:,:));
-    det_HR(iLoad,:,:) = apply_detrend(currMat, params);
+    det_HR(iLoad,:,:) = do_detrend(currMat, size(HR_mat, 3), params);
     
 end
 
-%% plot dynamic range after detrend
 min_det = squeeze(min(det_HR, [], 2));
 max_det = squeeze(max(det_HR, [], 2));
 
@@ -238,7 +226,7 @@ for icond =1:3
     end
     ylabel('dynamic range')
     title(str_load{icond})
-    
+    ylim([-.4, .4])
     
     subplot(3, 4, icond*4)
     avg_bar = mean(mat_bar);
@@ -251,167 +239,15 @@ for icond =1:3
         title('mean and std error')
     end
     xticks([])
-    
-    
-end
-
-
-
-
-
-
-spctr_mat = cat(3, spctr_load0.spctr_out, spctr_load2.spctr_out,spctr_load4.spctr_out)
-
-%% get p vals
-
-dists.L0 = perm_L0(mask.lglc.L0,:);
-dists.L2 = perm_L2(mask.lglc.L2,:);
-dists.L4 = perm_L4(mask.lglc.L4,:);
-
-peaks = max([fin_L0, fin_L2, fin_L4])
-
-fn = fieldnames(dists);
-for iLoad = 1:3
-    
-    [arrProb(:,1,iLoad), arrProb(:,2,iLoad)] = ecdf(dists.(fn{iLoad}));
-    
-    idxVal = find(arrProb(:,2,iLoad)>peaks(iLoad),1)-1;
-    pVals(iLoad) = 1-arrProb(idxVal, 1, iLoad);
+    ylim([-.4, .4])
     
 end
-    
-    
-
-%% nice plot
-figure
-cPlot = 0;
-lineProps = [];
-vect_thresh = [mask.max.L0, mask.max.L2, mask.max.L4];
-
-for iPlot = 1:3
-    
-    PlotStr(iPlot).RTavg = squeeze(mean(HR_mat(iPlot,:,:),3)); % is Hit rate, not Reaction times :)
-    PlotStr(iPlot).RTstdERR = squeeze(std(HR_mat(iPlot,:,:),[],3))/sqrt(n_subj);
-    
-    PlotStr(iPlot).detRTavg = squeeze(mean(det_HR(iPlot,:,:),3));
-    PlotStr(iPlot).detRTstdERR = squeeze(std(det_HR(iPlot,:,:),[],3))/sqrt(n_subj);
-    
-    PlotStr(iPlot).spctrAVG = squeeze(mean(spctr_mat(:,:,iPlot),2));
-    PlotStr(iPlot).spctrStdERR = squeeze(std(spctr_mat(:,:,iPlot),[],2))/sqrt(n_subj);
-    
-    cPlot = cPlot+1;
-    ax = subplot(6,2,cPlot)
-    lineProps.col = {cols(iPlot,:)};
-    lineProps.style = '-';
-    mseb(params.time_bins', PlotStr(iPlot).RTavg, PlotStr(iPlot).RTstdERR, lineProps, 1)
-    xlim(minmax(params.time_bins'))
-    title(str_load{iPlot})
-    ylabel('HR')
-    set(ax(1),'XTickLabel','')
-    set(ax(1),'XColor',get(gca,'Color'))
-    set(ax(1),'box','off')
-    
-    
-    cPlot = cPlot+2;
-    ax = subplot(6,2,cPlot); hold on;
-    lineProps.style = '-';
-    mseb(params.time_bins', PlotStr(iPlot).detRTavg, PlotStr(iPlot).detRTstdERR, lineProps, 1)
-    plot(params.time_bins, zeros(numel(params.time_bins), 1), 'k', 'LineWidth',.5) 
-    xlim(minmax(params.time_bins'))
-    ylabel({'detrended', 'HR'})
-    
-    if iPlot<3
-        set(ax(1),'XTickLabel','')
-        set(ax(1),'XColor',get(gca,'Color'))
-        
-    end
-    
-    if iPlot == 3
-        xlabel('time (s)')
-    end
-    
-    ax = subplot(6,2,[cPlot-1,cPlot+1]);
-    lineProps.style = '-';
-    mseb(spctr_load0.freqs, PlotStr(iPlot).spctrAVG', PlotStr(iPlot).spctrStdERR', lineProps, 1)
-    
-    hold on    
-    plot([0 12.5], [vect_thresh(iPlot),vect_thresh(iPlot)],'--k','LineWidth', 2) 
-    
-    xlim([2 10])
-    ylim([.15 .35])
-    
-    if iPlot ==1
-        title('spectra')
-    end
-    
-    if iPlot<3
-        set(ax(1),'XTickLabel','')
-        set(ax(1),'XColor',get(gca,'Color'))
-    end
-        
-    if iPlot == 3
-        xlabel('frequency (Hz)')
-    end
-    ylabel('fft amplitude')
-
-    cPlot = cPlot+1;
-    
-    
-end
-    
-
-%% final figure -truth moment-
-
-L0_95 = prctile(perm_L0, 95, 2);
-L2_95 = prctile(perm_L2, 95, 2);
-L4_95 = prctile(perm_L4, 95, 2);
 
 
-figure
-subplot(1,3,1)
-plot(spctr_load0.freqs, fin_L0,'b', 'LineWidth', 2); hold on;
-plot(spctr_load0.freqs, L0_95,'r', 'LineWidth', 2); hold on;
-title('load0')
-xlabel('freqs (Hz)')
-xlim(minmax(spctr_load0.freqs));
-ylabel('power')
-
-subplot(1,3,2)
-plot(spctr_load0.freqs, fin_L2,'b', 'LineWidth', 2); hold on;
-plot(spctr_load0.freqs, L2_95,'r', 'LineWidth', 2); hold on;
-title('load2')
-xlabel('freqs (Hz)')
-xlim(minmax(spctr_load0.freqs));
 
 
-subplot(1,3,3)
-plot(spctr_load0.freqs, fin_L4,'b', 'LineWidth', 2); hold on;
-plot(spctr_load0.freqs, L4_95,'r', 'LineWidth', 2); hold on;
-title('load4')
-xlabel('freqs (Hz)')
-xlim(minmax(spctr_load0.freqs));
 
-%% check uncorrected pVal for 
 
-bigPerm = cat(3, perm_L0, perm_L2, perm_L4);
-arrProb_ALL = nan(n_perm+1, 2, numel(spctr_load0.freqs), 3);
-mat_spctr = [fin_L0, fin_L2, fin_L4];
-for iLoad = 1:3
-    
-    for iFreq = 1:numel(L0_95)
-        
-        [arrProb_ALL(:,1,iFreq,iLoad), arrProb_ALL(:,2,iFreq,iLoad)] =...
-            ecdf(bigPerm(iFreq, :, iLoad));
-    
-        idxVal = find(arrProb_ALL(:,2,iFreq,iLoad)>mat_spctr(iFreq, iLoad),1)-1;
-        pVals_all(iFreq,iLoad) = 1-arrProb_ALL(idxVal, 1,iFreq, iLoad);
-        
-    end
-    
-end
-        
-        
-pVals_all = [spctr_load0.freqs', pVals_all];
 
-%% 
+
 

@@ -112,8 +112,12 @@ end
 % % gives back the probability for each value of x
 % plot(x, y, 'b');
 
+%% correlation between repeated measures
+% (Bland & Altman 1995)
+rmcorr = sqrt(ss_between/(ss_between + ss_error));
+
 %% table
-outTableANOVA=table(df_participant,df_total, ms_participant, F, CumulativeProbability,p, eta_squared);
+outTableANOVA=table(df_participant,df_total, ms_participant, F, CumulativeProbability,p, eta_squared, rmcorr);
 %fprintf('\n\n')
 %disp(outTable)
 

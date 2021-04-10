@@ -123,7 +123,8 @@ end
 
 if params.detrend_flag>=0
     
-    data = do_detrend(data);
+    data = local_do_detrend(data);
+    outStruct.det_data = data;
     
     if params.verbose==1
         fprintf('applied %d order detrend', params.detrend_flag)
@@ -148,7 +149,7 @@ if params.lp_filter
     params.lp_filter_props.Apass = 1; % default values in matlab filter builder
     params.lp_filter_props.Astop = 60;
     
-    data = do_LPfilter(data, params);
+    data = local_do_LPfilter(data, params);
             
 end
 
@@ -158,7 +159,7 @@ end
 
 if isempty(params.window)==0 
     
-    data = do_window(data);
+    data = local_do_window(data);
     
     if params.verbose==1
         disp([params.window ' window applied on data'])
@@ -202,7 +203,6 @@ cut_cmplx = cmplx_signal(1:end_signal, :);
 % create empty structure and append the spectra, the frequencies at the
 % current frequency resolution, and params structure
 
-outStruct = [];
 outStruct.spctr_out = cut_amplitude;
 outStruct.cmplx_out = cut_cmplx;
 outStruct.freqs = linspace(0,params.f_sample/2, end_signal);
@@ -215,7 +215,7 @@ outStruct.params = params; % attach this to remind you what you've done. Nothing
 %% detrend
 % several order
 
-    function detrended_data = do_detrend(data)
+    function detrended_data = local_do_detrend(data)
         % helper to apply multiple order detrend on data
         % assume data structure as before: each column a subject, evolution
         % of time series along first dimension (rows)
@@ -237,7 +237,7 @@ outStruct.params = params; % attach this to remind you what you've done. Nothing
 %not properly an anti alias, but ideally subserve the same function of
 %smoothing signal too close to nyquist limit
 
-    function filtered_data = do_LPfilter(data, params)
+    function filtered_data = local_do_LPfilter(data, params)
         
         filtered_data = nan(size(data));
         
@@ -271,7 +271,7 @@ outStruct.params = params; % attach this to remind you what you've done. Nothing
 
 %% hanning windowing of data 
 
-    function windowed_data = do_window(data)
+    function windowed_data = local_do_window(data)
         % helper to apply windowing on data
         % hanning, hamming, tukey allowed so far
         % assume data structure as before: each column a subject, evolution
