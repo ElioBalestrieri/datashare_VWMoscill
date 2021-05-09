@@ -8,7 +8,7 @@ function [outStruct] = cmpt_beh_spectra(data, params)
 %   structure as a reminder of the operations actually computed on the
 %   signal. The function requires the following inputs:
 %
-%   data   <- array of HR, if detection task, or accuracy if 2AFCT
+%   data   <- array of HR, if detection task, or accuracy if 2AFC
 %
 %   params <- structure containing following fields:
 %
